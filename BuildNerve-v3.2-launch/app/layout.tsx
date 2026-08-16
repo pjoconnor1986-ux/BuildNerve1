@@ -1,8 +1,17 @@
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
-export const metadata = {
-  title: "BuildNerve v3.1",
-  description: "AI construction operating system for UK contractors"
+
+export const metadata:Metadata={
+ title:{default:"BuildNerve",template:"%s | BuildNerve"},
+ description:"AI-powered construction operations for UK contractors",
+ applicationName:"BuildNerve"
 };
-export default function RootLayout({children}:{children:React.ReactNode}) {
-  return <html lang="en"><body>{children}</body></html>;
+
+export const viewport:Viewport={
+ themeColor:"#0b1725",
+ colorScheme:"light"
+};
+
+export default function RootLayout({children}:{children:React.ReactNode}){
+ return <html lang="en"><body>{children}</body></html>;
 }
