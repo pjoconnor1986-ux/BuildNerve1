@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { DrawingRegister, MaterialWorkspace, SafetyWorkspace, TargetedUpdates } from "./operations";
+import { DrawingRegister, MaterialWorkspace, SafetyWorkspace, SupplierDirectory, TargetedUpdates } from "./operations";
 
 type Priority="Red"|"Amber"|"Green";
-type View="home"|"capture"|"agent"|"projects"|"diaries"|"commercial"|"procurement"|"quality"|"safety"|"documents"|"updates"|"actions"|"activity"|"team";
+type View="home"|"capture"|"agent"|"projects"|"diaries"|"commercial"|"procurement"|"suppliers"|"quality"|"safety"|"documents"|"updates"|"actions"|"activity"|"team";
 type Action={id:number|string;item:string;owner:string;project:string;due:string;priority:Priority;status:"Open"|"Closed"};
 type CaptureResult={summary:string;diary?:string;actions?:Array<{item:string;owner:string;priority:Priority}>;risks?:string[];commercial?:string[];next?:string[]};
 
@@ -30,7 +30,7 @@ const activities=[
 ];
 const nav:Array<[View,string,string]>=[
  ["home","Today","⌂"],["capture","Quick Capture","＋"],["agent","BuildNerve AI","✦"],["projects","Projects","▦"],["diaries","Diaries","▤"],
- ["commercial","Commercial","£"],["procurement","Materials & CVR","▣"],["team","Team","♟"],["quality","Quality","✓"],["safety","Safety Forms","⌁"],["documents","Drawings","▧"],["updates","Targeted Updates","◎"],["actions","Actions","!"],["activity","Activity","↺"]
+ ["commercial","Commercial","£"],["procurement","Materials & CVR","▣"],["suppliers","Suppliers","⌂"],["team","Team","♟"],["quality","Quality","✓"],["safety","Safety Forms","⌁"],["documents","Drawings","▧"],["updates","Targeted Updates","◎"],["actions","Actions","!"],["activity","Activity","↺"]
 ];
 function Pill({v}:{v:string}){const c=/red|blocked|critical/i.test(v)?"red":/amber|due|pending/i.test(v)?"amber":/green|ready|passed|approved/i.test(v)?"green":"blue";return <span className={`pill ${c}`}>{v}</span>}
 function Card({title,sub,action,children}:{title:string;sub?:string;action?:React.ReactNode;children:React.ReactNode}){return <div className="card"><div className="cardHead"><div><h3>{title}</h3>{sub&&<p>{sub}</p>}</div>{action}</div>{children}</div>}
@@ -81,6 +81,7 @@ export default function Home(){
    {view==='diaries'&&<section className="grid two"><Card title="Today’s diaries" sub="Capture once; reuse everywhere"><Table headers={["Project","Status","Last update","Issues"]} rows={[["Oakfield","Draft","11:28","2"],["Riverside","Live","10:54","3"],["Westgate","Live","10:31","0"]]}/><button className="wide" onClick={()=>setView('capture')}>＋ Add site update</button></Card><Card title="Automatic reuse"><Row a="End-of-day report" b="Prepared"/><Row a="Commercial evidence links" b="4"/><Row a="Actions extracted" b="6"/><Row a="Programme risks" b="2"/><button className="wide" onClick={()=>openAgent('Draft today’s end-of-day reports from all captured site information')}>✦ Draft reports</button></Card></section>}
    {view==='commercial'&&<section><div className="metrics"><Metric label="Forecast revenue" value="£8.38m"/><Metric label="Forecast margin" value="11.1%"/><Metric label="Unpriced change" value="£310k"/><Metric label="Evidence gaps" value="3"/></div><Card title="Commercial attention" sub="Site evidence connected to value"><Table headers={["Project","Event","Value","Evidence","Status"]} rows={[["Riverside","Attenuation instruction","£162k","Diary + instruction",<Pill key="a" v="Amber"/>],["Oakfield","Utility clash / delay","TBC","Diary + photos",<Pill key="b" v="Pending"/>],["Oakfield","Drainage revision","£148k","Drawing + instruction",<Pill key="c" v="Amber"/>]]}/><button className="wide" onClick={()=>openAgent('Review all commercial events and identify which evidence or notices need attention')}>✦ Protect margin</button></Card></section>}
    {view==='procurement'&&<MaterialWorkspace projects={projects}/>} 
+   {view==='suppliers'&&<SupplierDirectory/>}
    {view==='quality'&&<section className="grid two"><Card title="Quality readiness"><Row a="Hold points due" b="6"/><Row a="Open NCRs" b="4"/><Row a="Overdue NCRs" b="1"/><Row a="Handover records" b="82%"/></Card><Card title="BuildNerve QA Agent"><p className="muted">Checks what is due, what evidence is missing and what is about to be covered up before records are complete.</p><button className="wide" onClick={()=>openAgent('Find today’s QA risks and anything at risk of being covered up without records')}>✦ Check QA now</button></Card></section>}
    {view==='safety'&&<SafetyWorkspace projects={projects}/>} 
    {view==='documents'&&<DrawingRegister projects={projects}/>} 
