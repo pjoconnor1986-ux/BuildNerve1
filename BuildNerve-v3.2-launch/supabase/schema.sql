@@ -308,5 +308,6 @@ begin
 end $$;
 revoke all on function public.create_team_invitation(text,text) from public,anon;
 revoke all on function public.accept_team_invitation(text,text) from public,anon;
-grant execute on function public.create_team_invitation(text,text) to authenticated;
-grant execute on function public.accept_team_invitation(text,text) to authenticated;
+grant execute on function public.create_team_invitation(text,text) to authenticated,anon;
+grant execute on function public.accept_team_invitation(text,text) to authenticated,anon;
+-- Both functions reject unauthenticated calls internally; anon visibility keeps PostgREST schema discovery consistent.
