@@ -11,7 +11,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   organisation_id uuid not null references public.organisations(id) on delete cascade,
   full_name text not null,
-  role text not null check (role in ('director','pm','qs','site_agent','engineer','foreman','buyer','admin','viewer')),
+  role text not null check (role in ('company_owner','director','admin','pm','site_manager','site_agent','qs','buyer','engineer','foreman','viewer')),
   created_at timestamptz not null default now()
 );
 
@@ -168,20 +168,45 @@ as $$ select organisation_id from public.profiles where id=auth.uid() limit 1 $$
 revoke all on function public.current_org_id() from public;
 grant execute on function public.current_org_id() to authenticated;
 
+create or replace function public.onboard_company(
+  p_company_name text,
+  p_full_name text,
+  p_project_name text,
+  p_client text default null
+)
+returns jsonb
+language plpgsql security definer
+set search_path=public
+as $$
+declare new_org uuid; new_project uuid;
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  if exists(select 1 from public.profiles where id=(select auth.uid())) then raise exception 'Your account already belongs to a company'; end if;
+  if length(trim(p_company_name)) < 2 then raise exception 'Enter your company name'; end if;
+  if length(trim(p_full_name)) < 2 then raise exception 'Enter your full name'; end if;
+  if length(trim(p_project_name)) < 2 then raise exception 'Enter your first project name'; end if;
+
+  insert into public.organisations(name) values(trim(p_company_name)) returning id into new_org;
+  insert into public.profiles(id,organisation_id,full_name,role) values((select auth.uid()),new_org,trim(p_full_name),'company_owner');
+  insert into public.projects(organisation_id,name,client,status)
+    values(new_org,trim(p_project_name),nullif(trim(coalesce(p_client,'')),''),'live') returning id into new_project;
+  insert into public.audit_events(organisation_id,project_id,actor_id,actor_type,event_type,entity_type,entity_id,payload)
+    values(new_org,new_project,(select auth.uid()),'user','company_onboarded','organisation',new_org,
+      jsonb_build_object('company_name',trim(p_company_name),'first_project',trim(p_project_name)));
+  return jsonb_build_object('organisation_id',new_org,'project_id',new_project);
+end $$;
+revoke all on function public.onboard_company(text,text,text,text) from public;
+grant execute on function public.onboard_company(text,text,text,text) to authenticated;
+
 create or replace function public.create_organisation_for_current_user(p_name text,p_full_name text,p_role text)
 returns uuid
 language plpgsql security definer
 set search_path=public
 as $$
-declare new_org uuid;
+declare result jsonb;
 begin
-  if auth.uid() is null then raise exception 'Authentication required'; end if;
-  if exists(select 1 from public.profiles where id=auth.uid()) then raise exception 'User already belongs to an organisation'; end if;
-  if length(trim(p_name)) < 2 or length(trim(p_full_name)) < 2 then raise exception 'Company and name are required'; end if;
-  if p_role not in ('director','pm','qs','site_agent','engineer','foreman','buyer','admin') then raise exception 'Invalid role'; end if;
-  insert into public.organisations(name) values(trim(p_name)) returning id into new_org;
-  insert into public.profiles(id,organisation_id,full_name,role) values(auth.uid(),new_org,trim(p_full_name),p_role);
-  return new_org;
+  result := public.onboard_company(p_name,p_full_name,'First project',null);
+  return (result->>'organisation_id')::uuid;
 end $$;
 revoke all on function public.create_organisation_for_current_user(text,text,text) from public;
 grant execute on function public.create_organisation_for_current_user(text,text,text) to authenticated;
