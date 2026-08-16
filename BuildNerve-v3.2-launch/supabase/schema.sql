@@ -367,3 +367,17 @@ drop policy if exists targeted_recipients_create on public.targeted_update_recip
 create policy targeted_recipients_create on public.targeted_update_recipients for insert to authenticated with check(exists(select 1 from public.targeted_updates u join public.profiles p on p.id=recipient_id where u.id=update_id and u.created_by=(select auth.uid()) and p.organisation_id=public.current_org_id()));
 
 grant select,insert,update,delete on public.drawings,public.material_orders,public.safety_forms,public.targeted_updates,public.targeted_update_recipients to authenticated;
+
+create table if not exists public.material_suppliers (
+ id uuid primary key default gen_random_uuid(), organisation_id uuid not null references public.organisations(id) on delete cascade,
+ company_name text not null, category text not null default 'General materials', contact_name text, email text, phone text,
+ website text, account_reference text, address text, typical_lead_days integer check(typical_lead_days is null or typical_lead_days>=0),
+ delivery_notes text, status text not null default 'active' check(status in ('active','inactive')),
+ created_by uuid not null references public.profiles(id), created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+);
+create index if not exists idx_material_suppliers_org_name on public.material_suppliers(organisation_id,company_name);
+alter table public.material_suppliers enable row level security;
+drop policy if exists material_suppliers_tenant on public.material_suppliers;
+create policy material_suppliers_tenant on public.material_suppliers for all to authenticated
+using(organisation_id=public.current_org_id()) with check(organisation_id=public.current_org_id());
+grant select,insert,update,delete on public.material_suppliers to authenticated;
