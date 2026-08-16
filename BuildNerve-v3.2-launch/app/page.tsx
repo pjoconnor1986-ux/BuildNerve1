@@ -101,6 +101,7 @@ function AgentStep({n,t,d}:{n:string;t:string;d:string}){return <div className="
 type TeamMember={id:string;full_name:string;role:string;created_at:string};
 type TeamInvite={id:string;email:string;role:string;expires_at:string;accepted_at:string|null;created_at:string};
 const roleNames:Record<string,string>={company_owner:"Company Owner",director:"Director",admin:"Administrator",pm:"Project Manager",site_manager:"Site Manager",qs:"Quantity Surveyor",buyer:"Buyer",viewer:"Viewer"};
+const roleHelp:Record<string,string>={director:"Company-wide visibility and oversight",admin:"Manage the workspace and invite people",pm:"Manage projects, actions and delivery",site_manager:"Run site records, safety and quality",qs:"Commercial events, costs and CVR",buyer:"Suppliers, orders and delivery dates",viewer:"Read-only access to company information"};
 
 function TeamPanel(){
  const [members,setMembers]=useState<TeamMember[]>([]);
@@ -110,6 +111,7 @@ function TeamPanel(){
  const [link,setLink]=useState("");
  const [message,setMessage]=useState("");
  const [busy,setBusy]=useState(false);
+ const [invitedEmail,setInvitedEmail]=useState("");
 
  async function load(){
   const supabase=createClient();
@@ -130,8 +132,10 @@ function TeamPanel(){
   const {data,error}=await supabase.rpc("create_team_invitation",{p_email:email,p_role:role});
   if(error){setMessage(error.message);setBusy(false);return}
   const result=data as {token:string;expires_at:string};
-  setLink(location.origin+"/join?token="+result.token);
-  setMessage("Invitation created. Copy this private link and send it to "+email+".");
+  const newLink=location.origin+"/join?token="+result.token;
+  setLink(newLink);setInvitedEmail(email);
+  await navigator.clipboard.writeText(newLink).catch(()=>undefined);
+  setMessage("Invite ready and copied. Send it to "+email+" using the button below.");
   setEmail("");setBusy(false);load();
  }
 
@@ -140,22 +144,30 @@ function TeamPanel(){
   setMessage("Invitation link copied.");
  }
 
+ function shareByEmail(){
+  const subject=encodeURIComponent("You’re invited to join "+(document.querySelector(".company small")?.textContent||"our BuildNerve workspace"));
+  const body=encodeURIComponent("You’ve been invited to join our BuildNerve workspace as "+(roleNames[role]||role)+".\n\nOpen your secure invitation:\n"+link+"\n\nThis private link expires after 7 days and is tied to your email address.");
+  location.href=`mailto:${invitedEmail}?subject=${subject}&body=${body}`;
+ }
+
+ function inviteAgain(invite:TeamInvite){setEmail(invite.email);setRole(invite.role);setLink("");setInvitedEmail("");setMessage("Ready to create a fresh link for "+invite.email+". Check the role, then press Create & copy invite link.");document.querySelector(".teamInvite")?.scrollIntoView({behavior:"smooth",block:"center"})}
+
  return <section className="teamLayout">
-  <Card title="Invite a team member" sub="Choose their access level. Invitation links expire after 7 days.">
+  <Card title="Invite someone in two quick steps" sub="Enter their email, choose what they do, then BuildNerve copies a secure link for you.">
    <form className="teamInvite" onSubmit={invite}>
-    <label>Work email<input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.co.uk"/></label>
-    <label>Role<select value={role} onChange={e=>setRole(e.target.value)}>{Object.entries(roleNames).filter(([key])=>key!=="company_owner").map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
-    <button disabled={busy}>{busy?"Creating…":"Create invitation"}</button>
+    <label><span className="stepLabel"><b>1</b> Their work email</span><input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.co.uk"/></label>
+    <fieldset className="roleChoices"><legend><span className="stepLabel"><b>2</b> What will they do?</span></legend>{Object.entries(roleNames).filter(([key])=>key!=="company_owner").map(([key,label])=><label className={role===key?"selected":""} key={key}><input type="radio" name="teamRole" value={key} checked={role===key} onChange={()=>setRole(key)}/><span><strong>{label}</strong><small>{roleHelp[key]}</small></span></label>)}</fieldset>
+    <button className="invitePrimary" disabled={busy}>{busy?"Creating secure link…":"Create & copy invite link"}</button>
    </form>
    {message&&<p className="teamMessage">{message}</p>}
-   {link&&<div className="inviteLink"><input readOnly value={link}/><button onClick={copy}>Copy link</button></div>}
-   <p className="muted">Only Company Owners and Administrators can create invitations. Each link is single-use and tied to the invited email.</p>
+   {link&&<div className="inviteSuccess"><div><span>✓</span><div><b>Invitation ready</b><small>{invitedEmail} · {roleNames[role]}</small></div></div><div className="inviteActions"><button onClick={shareByEmail}>✉ Open email</button><button className="secondary" onClick={copy}>Copy again</button></div><input readOnly value={link}/></div>}
+   <p className="muted">The person creates their own password. Links are single-use, tied to their email, and expire after 7 days.</p>
   </Card>
   <Card title="Company team" sub={members.length+" active "+(members.length===1?"member":"members")}>
    <div className="teamGrid">{members.map(member=><div className="teamMember" key={member.id}><span className="teamAvatar">{(member.full_name||"?").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}</span><div><b>{member.full_name||"Unnamed member"}</b><small>Joined {new Date(member.created_at).toLocaleDateString("en-GB")}</small></div><Pill v={roleNames[member.role]||member.role}/></div>)}</div>
   </Card>
   <Card title="Pending invitations" sub="A simple record of who has been invited">
-   {invites.filter(x=>!x.accepted_at).length===0?<p className="muted">No pending invitations.</p>:<Table headers={["Email","Role","Expires"]} rows={invites.filter(x=>!x.accepted_at).map(x=>[x.email,roleNames[x.role]||x.role,new Date(x.expires_at).toLocaleDateString("en-GB")])}/>}
+   {invites.filter(x=>!x.accepted_at).length===0?<p className="muted">No pending invitations.</p>:<Table headers={["Email","Role","Expires","Action"]} rows={invites.filter(x=>!x.accepted_at).map(x=>[x.email,roleNames[x.role]||x.role,new Date(x.expires_at).toLocaleDateString("en-GB"),<button className="statusBtn" key={x.id} onClick={()=>inviteAgain(x)}>Invite again</button>])}/>} 
   </Card>
  </section>
 }
