@@ -264,7 +264,7 @@ create table if not exists public.team_invitations (
 create index if not exists idx_team_invitations_org on public.team_invitations(organisation_id,created_at desc);
 create unique index if not exists idx_team_invitations_active_email on public.team_invitations(organisation_id,lower(email)) where accepted_at is null;
 alter table public.team_invitations enable row level security;
-revoke insert,update,delete on public.team_invitations from authenticated;
+revoke all on public.team_invitations from public,anon,authenticated;
 grant select on public.team_invitations to authenticated;
 drop policy if exists team_invitations_admin_select on public.team_invitations;
 create policy team_invitations_admin_select on public.team_invitations for select to authenticated
