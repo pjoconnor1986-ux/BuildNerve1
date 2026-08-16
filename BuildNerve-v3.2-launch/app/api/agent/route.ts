@@ -52,7 +52,13 @@ export async function POST(req:Request){
    return NextResponse.json({reply:fallback(message,context),mode:"fallback"});
   }
   const data=await response.json();
-  return NextResponse.json({reply:data.output_text||fallback(message,context),mode:"ai"});
+  const reply=(data.output||[])
+   .flatMap((item:any)=>item.content||[])
+   .filter((part:any)=>part.type==="output_text")
+   .map((part:any)=>part.text||"")
+   .join("\n")
+   .trim();
+  return NextResponse.json({reply:reply||fallback(message,context),mode:reply?"ai":"fallback"});
  }catch{
   return NextResponse.json({error:"BuildNerve could not process this request."},{status:500});
  }
