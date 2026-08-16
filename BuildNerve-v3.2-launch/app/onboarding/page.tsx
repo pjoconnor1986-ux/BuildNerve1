@@ -30,7 +30,7 @@ export default function Onboarding(){
 
  return <main className="authPage"><section className="authCard wide">
   <div className="authBrand"><b>BN</b><div><h1>Welcome to BuildNerve</h1><p>Create your private company workspace and first live project.</p></div></div>
-  <div className="guard"><strong>14-day trial setup</strong><br/>You will be the Company Owner. You can invite your team after setup.</div>
+  <div className="guard"><strong>14-day trial setup</strong><br/>You will be the Company Owner. Team invitations are the next setup stage.</div>
   <form onSubmit={submit}>
    <label>Company name<input required minLength={2} value={company} onChange={e=>setCompany(e.target.value)} placeholder="e.g. ABC Groundworks Ltd"/></label>
    <label>Your full name<input required minLength={2} value={name} onChange={e=>setName(e.target.value)} autoComplete="name" placeholder="e.g. Alex Smith"/></label>
