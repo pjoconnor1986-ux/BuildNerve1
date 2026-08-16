@@ -46,7 +46,11 @@ export async function POST(req:Request){
     ]
    })
   });
-  if(!response.ok)return NextResponse.json({reply:fallback(message,context),mode:"fallback"});
+  if(!response.ok){
+   const errorText=await response.text();
+   console.error("[api/agent] OpenAI request failed",{status:response.status,error:errorText.slice(0,1000)});
+   return NextResponse.json({reply:fallback(message,context),mode:"fallback"});
+  }
   const data=await response.json();
   return NextResponse.json({reply:data.output_text||fallback(message,context),mode:"ai"});
  }catch{
