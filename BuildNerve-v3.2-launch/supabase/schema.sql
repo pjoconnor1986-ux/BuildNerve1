@@ -196,20 +196,8 @@ begin
   return jsonb_build_object('organisation_id',new_org,'project_id',new_project);
 end $$;
 revoke all on function public.onboard_company(text,text,text,text) from public;
+revoke all on function public.onboard_company(text,text,text,text) from anon;
 grant execute on function public.onboard_company(text,text,text,text) to authenticated;
-
-create or replace function public.create_organisation_for_current_user(p_name text,p_full_name text,p_role text)
-returns uuid
-language plpgsql security definer
-set search_path=public
-as $$
-declare result jsonb;
-begin
-  result := public.onboard_company(p_name,p_full_name,'First project',null);
-  return (result->>'organisation_id')::uuid;
-end $$;
-revoke all on function public.create_organisation_for_current_user(text,text,text) from public;
-grant execute on function public.create_organisation_for_current_user(text,text,text) to authenticated;
 
 -- Tenant policies
 drop policy if exists organisations_select on public.organisations;
