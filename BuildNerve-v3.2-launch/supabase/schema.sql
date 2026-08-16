@@ -244,3 +244,69 @@ drop policy if exists project_documents_delete on storage.objects;
 create policy project_documents_delete on storage.objects for delete to authenticated using (
   bucket_id='project-documents' and (storage.foldername(name))[1]=public.current_org_id()::text
 );
+
+
+-- Team invitations and protected company roles
+create extension if not exists pgcrypto;
+
+create table if not exists public.team_invitations (
+ id uuid primary key default gen_random_uuid(),
+ organisation_id uuid not null references public.organisations(id) on delete cascade,
+ email text not null,
+ role text not null check (role in ('director','admin','pm','site_manager','qs','buyer','viewer')),
+ token_hash text not null unique,
+ invited_by uuid not null references public.profiles(id),
+ expires_at timestamptz not null default (now()+interval '7 days'),
+ accepted_at timestamptz,
+ accepted_by uuid references public.profiles(id),
+ created_at timestamptz not null default now()
+);
+create index if not exists idx_team_invitations_org on public.team_invitations(organisation_id,created_at desc);
+create unique index if not exists idx_team_invitations_active_email on public.team_invitations(organisation_id,lower(email)) where accepted_at is null;
+alter table public.team_invitations enable row level security;
+revoke insert,update,delete on public.team_invitations from authenticated;
+grant select on public.team_invitations to authenticated;
+drop policy if exists team_invitations_admin_select on public.team_invitations;
+create policy team_invitations_admin_select on public.team_invitations for select to authenticated
+using(organisation_id=public.current_org_id() and exists(select 1 from public.profiles p where p.id=(select auth.uid()) and p.role in ('company_owner','admin')));
+
+create or replace function public.create_team_invitation(p_email text,p_role text)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare inviter public.profiles%rowtype; raw_token text; invite_id uuid;
+begin
+ if auth.uid() is null then raise exception 'Authentication required'; end if;
+ select * into inviter from public.profiles where id=(select auth.uid());
+ if inviter.id is null or inviter.role not in ('company_owner','admin') then raise exception 'Only a Company Owner or Administrator can invite team members'; end if;
+ if p_email !~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$' then raise exception 'Enter a valid email address'; end if;
+ if p_role not in ('director','admin','pm','site_manager','qs','buyer','viewer') then raise exception 'Invalid team role'; end if;
+ if exists(select 1 from public.profiles p join auth.users u on u.id=p.id where p.organisation_id=inviter.organisation_id and lower(u.email)=lower(trim(p_email))) then raise exception 'This person is already a member'; end if;
+ delete from public.team_invitations where organisation_id=inviter.organisation_id and lower(email)=lower(trim(p_email)) and accepted_at is null;
+ raw_token=encode(gen_random_bytes(24),'hex');
+ insert into public.team_invitations(organisation_id,email,role,token_hash,invited_by)
+ values(inviter.organisation_id,lower(trim(p_email)),p_role,encode(digest(raw_token,'sha256'),'hex'),inviter.id) returning id into invite_id;
+ insert into public.audit_events(organisation_id,actor_id,actor_type,event_type,entity_type,entity_id,payload)
+ values(inviter.organisation_id,inviter.id,'user','team_invitation_created','team_invitation',invite_id,jsonb_build_object('email',lower(trim(p_email)),'role',p_role));
+ return jsonb_build_object('id',invite_id,'token',raw_token,'expires_at',now()+interval '7 days');
+end $$;
+
+create or replace function public.accept_team_invitation(p_token text,p_full_name text)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare invitation public.team_invitations%rowtype; user_email text;
+begin
+ if auth.uid() is null then raise exception 'Authentication required'; end if;
+ if exists(select 1 from public.profiles where id=(select auth.uid())) then raise exception 'Your account already belongs to a company'; end if;
+ select email into user_email from auth.users where id=(select auth.uid());
+ select * into invitation from public.team_invitations where token_hash=encode(digest(p_token,'sha256'),'hex') and accepted_at is null and expires_at>now() for update;
+ if invitation.id is null then raise exception 'This invitation is invalid or has expired'; end if;
+ if lower(coalesce(user_email,''))<>lower(invitation.email) then raise exception 'Sign in using the email address that was invited'; end if;
+ if length(trim(p_full_name))<2 then raise exception 'Enter your full name'; end if;
+ insert into public.profiles(id,organisation_id,full_name,role) values((select auth.uid()),invitation.organisation_id,trim(p_full_name),invitation.role);
+ update public.team_invitations set accepted_at=now(),accepted_by=(select auth.uid()) where id=invitation.id;
+ insert into public.audit_events(organisation_id,actor_id,actor_type,event_type,entity_type,entity_id,payload)
+ values(invitation.organisation_id,(select auth.uid()),'user','team_invitation_accepted','profile',(select auth.uid()),jsonb_build_object('role',invitation.role));
+ return jsonb_build_object('organisation_id',invitation.organisation_id,'role',invitation.role);
+end $$;
+revoke all on function public.create_team_invitation(text,text) from public,anon;
+revoke all on function public.accept_team_invitation(text,text) from public,anon;
+grant execute on function public.create_team_invitation(text,text) to authenticated;
+grant execute on function public.accept_team_invitation(text,text) to authenticated;
