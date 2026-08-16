@@ -18,7 +18,7 @@ export async function middleware(request:NextRequest){
 
  const {data:{user}}=await supabase.auth.getUser();
  const path=request.nextUrl.pathname;
- const publicPath=path.startsWith("/login")||path.startsWith("/api/health")||path.startsWith("/_next")||path==="/manifest.webmanifest";
+ const publicPath=path.startsWith("/login")||path.startsWith("/join")||path.startsWith("/api/health")||path.startsWith("/_next")||path==="/manifest.webmanifest";
 
  if(!user&&!publicPath){
   const next=request.nextUrl.clone();
@@ -29,7 +29,7 @@ export async function middleware(request:NextRequest){
 
  const {data:profile}=await supabase.from("profiles").select("id").eq("id",user.id).maybeSingle();
 
- if(!profile&&path!=="/onboarding"&&!path.startsWith("/api/health")&&!path.startsWith("/api/auth/")){
+ if(!profile&&path!=="/onboarding"&&!path.startsWith("/join")&&!path.startsWith("/api/health")&&!path.startsWith("/api/auth/")){
   const next=request.nextUrl.clone();
   next.pathname="/onboarding";
   return NextResponse.redirect(next);
