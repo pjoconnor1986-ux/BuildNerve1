@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 type Priority="Red"|"Amber"|"Green";
-type View="home"|"capture"|"agent"|"projects"|"diaries"|"commercial"|"procurement"|"quality"|"safety"|"documents"|"actions"|"activity";
+type View="home"|"capture"|"agent"|"projects"|"diaries"|"commercial"|"procurement"|"quality"|"safety"|"documents"|"actions"|"activity"|"team";
 type Action={id:number|string;item:string;owner:string;project:string;due:string;priority:Priority;status:"Open"|"Closed"};
 type CaptureResult={summary:string;diary?:string;actions?:Array<{item:string;owner:string;priority:Priority}>;risks?:string[];commercial?:string[];next?:string[]};
 
@@ -28,7 +29,7 @@ const activities=[
 ];
 const nav:Array<[View,string,string]>=[
  ["home","Today","⌂"],["capture","Quick Capture","＋"],["agent","BuildNerve AI","✦"],["projects","Projects","▦"],["diaries","Diaries","▤"],
- ["commercial","Commercial","£"],["procurement","Procurement","▣"],["quality","Quality","✓"],["safety","Safety","⌁"],["documents","Documents","▧"],["actions","Actions","!"],["activity","Activity","↺"]
+ ["commercial","Commercial","£"],["procurement","Procurement","▣"],["team","Team","♟"],["quality","Quality","✓"],["safety","Safety","⌁"],["documents","Documents","▧"],["actions","Actions","!"],["activity","Activity","↺"]
 ];
 function Pill({v}:{v:string}){const c=/red|blocked|critical/i.test(v)?"red":/amber|due|pending/i.test(v)?"amber":/green|ready|passed|approved/i.test(v)?"green":"blue";return <span className={`pill ${c}`}>{v}</span>}
 function Card({title,sub,action,children}:{title:string;sub?:string;action?:React.ReactNode;children:React.ReactNode}){return <div className="card"><div className="cardHead"><div><h3>{title}</h3>{sub&&<p>{sub}</p>}</div>{action}</div>{children}</div>}
@@ -82,6 +83,7 @@ export default function Home(){
    {view==='quality'&&<section className="grid two"><Card title="Quality readiness"><Row a="Hold points due" b="6"/><Row a="Open NCRs" b="4"/><Row a="Overdue NCRs" b="1"/><Row a="Handover records" b="82%"/></Card><Card title="BuildNerve QA Agent"><p className="muted">Checks what is due, what evidence is missing and what is about to be covered up before records are complete.</p><button className="wide" onClick={()=>openAgent('Find today’s QA risks and anything at risk of being covered up without records')}>✦ Check QA now</button></Card></section>}
    {view==='safety'&&<section className="grid two"><Card title="Work readiness"><Table headers={["Area","Permit","Utility info","Status"]} rows={[["Road 3","PTW-104","Plans + scan recorded",<Pill key="1" v="Ready"/>],["Plot 48","PTW-105","Scan outstanding",<Pill key="2" v="Blocked"/>],["Drain R7","PTW-211","Plans + markings",<Pill key="3" v="Ready"/>]]}/></Card><Card title="Human gate"><div className="guard big">BuildNerve can detect missing controls, prepare checklists and escalate blockers. It does not issue permits, certify inspections or authorise excavation.</div><button className="wide" onClick={()=>openAgent('Show every work area that is not ready and why')}>✦ Check readiness</button></Card></section>}
    {view==='documents'&&<section className="grid two"><Card title="Document intelligence"><Table headers={["Document","Project","Rev","AI status"]} rows={[["Drainage GA","Oakfield","C7","Indexed"],["Utility composite","Oakfield","P4","Indexed"],["Attenuation instruction","Riverside","01","Change found"],["Earthworks spec","Riverside","03","Indexed"]]}/></Card><Card title="Revision Agent"><p className="muted">v3.2 includes the workflow hooks for document ingestion: detect revision, identify meaningful change, preserve source reference, propose affected actions, and ask a human to confirm consequential changes.</p><button className="wide" onClick={()=>openAgent('Explain the likely project impacts when a revised construction drawing is uploaded')}>✦ Review revision workflow</button></Card></section>}
+   {view==='team'&&<TeamPanel/>}
    {view==='actions'&&<section><Card title="Actions" sub="One accountable queue"><Table headers={["Action","Project","Owner","Due","Priority","Status"]} rows={actions.map(a=>[a.item,a.project,a.owner,a.due,<Pill key={a.id} v={a.priority}/>,<button key={`${a.id}b`} className="statusBtn" onClick={()=>setActions(actions.map(x=>x.id===a.id?{...x,status:x.status==='Open'?'Closed':'Open'}:x))}>{a.status}</button>])}/></Card></section>}
    {view==='activity'&&<section><Card title="Activity & evidence trail" sub="Who/what changed, when, and why"><Table headers={["Time","Actor","Activity","Project"]} rows={activities}/><div className="auditNote">Production version: every AI-created action, edited record, approval and document link should be written to an immutable audit event.</div></Card></section>}
   </main>
@@ -91,3 +93,66 @@ export default function Home(){
 function Row({a,b}:{a:string;b:string}){return <div className="row"><span>{a}</span><b>{b}</b></div>}
 function Result({label,items}:{label:string;items:string[]}){if(!items.length)return null;return <div className="result"><b>{label}</b>{items.map((x,i)=><div key={i}>• {x}</div>)}</div>}
 function AgentStep({n,t,d}:{n:string;t:string;d:string}){return <div className="agentStep"><span>{n}</span><div><b>{t}</b><small>{d}</small></div></div>}
+
+
+type TeamMember={id:string;full_name:string;role:string;created_at:string};
+type TeamInvite={id:string;email:string;role:string;expires_at:string;accepted_at:string|null;created_at:string};
+const roleNames:Record<string,string>={company_owner:"Company Owner",director:"Director",admin:"Administrator",pm:"Project Manager",site_manager:"Site Manager",qs:"Quantity Surveyor",buyer:"Buyer",viewer:"Viewer"};
+
+function TeamPanel(){
+ const [members,setMembers]=useState<TeamMember[]>([]);
+ const [invites,setInvites]=useState<TeamInvite[]>([]);
+ const [email,setEmail]=useState("");
+ const [role,setRole]=useState("pm");
+ const [link,setLink]=useState("");
+ const [message,setMessage]=useState("");
+ const [busy,setBusy]=useState(false);
+
+ async function load(){
+  const supabase=createClient();
+  if(!supabase)return;
+  const [memberResult,inviteResult]=await Promise.all([
+   supabase.from("profiles").select("id,full_name,role,created_at").order("created_at"),
+   supabase.from("team_invitations").select("id,email,role,expires_at,accepted_at,created_at").order("created_at",{ascending:false})
+  ]);
+  if(memberResult.data)setMembers(memberResult.data as TeamMember[]);
+  if(inviteResult.data)setInvites(inviteResult.data as TeamInvite[]);
+ }
+ useEffect(()=>{load()},[]);
+
+ async function invite(event:React.FormEvent){
+  event.preventDefault();setBusy(true);setMessage("");setLink("");
+  const supabase=createClient();
+  if(!supabase){setMessage("Team services are unavailable.");setBusy(false);return}
+  const {data,error}=await supabase.rpc("create_team_invitation",{p_email:email,p_role:role});
+  if(error){setMessage(error.message);setBusy(false);return}
+  const result=data as {token:string;expires_at:string};
+  setLink(location.origin+"/join?token="+result.token);
+  setMessage("Invitation created. Copy this private link and send it to "+email+".");
+  setEmail("");setBusy(false);load();
+ }
+
+ async function copy(){
+  await navigator.clipboard.writeText(link);
+  setMessage("Invitation link copied.");
+ }
+
+ return <section className="teamLayout">
+  <Card title="Invite a team member" sub="Choose their access level. Invitation links expire after 7 days.">
+   <form className="teamInvite" onSubmit={invite}>
+    <label>Work email<input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.co.uk"/></label>
+    <label>Role<select value={role} onChange={e=>setRole(e.target.value)}>{Object.entries(roleNames).filter(([key])=>key!=="company_owner").map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
+    <button disabled={busy}>{busy?"Creating…":"Create invitation"}</button>
+   </form>
+   {message&&<p className="teamMessage">{message}</p>}
+   {link&&<div className="inviteLink"><input readOnly value={link}/><button onClick={copy}>Copy link</button></div>}
+   <p className="muted">Only Company Owners and Administrators can create invitations. Each link is single-use and tied to the invited email.</p>
+  </Card>
+  <Card title="Company team" sub={members.length+" active "+(members.length===1?"member":"members")}>
+   <div className="teamGrid">{members.map(member=><div className="teamMember" key={member.id}><span className="teamAvatar">{(member.full_name||"?").split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}</span><div><b>{member.full_name||"Unnamed member"}</b><small>Joined {new Date(member.created_at).toLocaleDateString("en-GB")}</small></div><Pill v={roleNames[member.role]||member.role}/></div>)}</div>
+  </Card>
+  <Card title="Pending invitations" sub="A simple record of who has been invited">
+   {invites.filter(x=>!x.accepted_at).length===0?<p className="muted">No pending invitations.</p>:<Table headers={["Email","Role","Expires"]} rows={invites.filter(x=>!x.accepted_at).map(x=>[x.email,roleNames[x.role]||x.role,new Date(x.expires_at).toLocaleDateString("en-GB")])}/>}
+  </Card>
+ </section>
+}
