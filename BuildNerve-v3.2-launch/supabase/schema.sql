@@ -281,9 +281,9 @@ begin
  if p_role not in ('director','admin','pm','site_manager','qs','buyer','viewer') then raise exception 'Invalid team role'; end if;
  if exists(select 1 from public.profiles p join auth.users u on u.id=p.id where p.organisation_id=inviter.organisation_id and lower(u.email)=lower(trim(p_email))) then raise exception 'This person is already a member'; end if;
  delete from public.team_invitations where organisation_id=inviter.organisation_id and lower(email)=lower(trim(p_email)) and accepted_at is null;
- raw_token=encode(gen_random_bytes(24),'hex');
+ raw_token=encode(extensions.gen_random_bytes(24),'hex');
  insert into public.team_invitations(organisation_id,email,role,token_hash,invited_by)
- values(inviter.organisation_id,lower(trim(p_email)),p_role,encode(digest(raw_token,'sha256'),'hex'),inviter.id) returning id into invite_id;
+ values(inviter.organisation_id,lower(trim(p_email)),p_role,encode(extensions.digest(raw_token,'sha256'),'hex'),inviter.id) returning id into invite_id;
  insert into public.audit_events(organisation_id,actor_id,actor_type,event_type,entity_type,entity_id,payload)
  values(inviter.organisation_id,inviter.id,'user','team_invitation_created','team_invitation',invite_id,jsonb_build_object('email',lower(trim(p_email)),'role',p_role));
  return jsonb_build_object('id',invite_id,'token',raw_token,'expires_at',now()+interval '7 days');
@@ -296,7 +296,7 @@ begin
  if auth.uid() is null then raise exception 'Authentication required'; end if;
  if exists(select 1 from public.profiles where id=(select auth.uid())) then raise exception 'Your account already belongs to a company'; end if;
  select email into user_email from auth.users where id=(select auth.uid());
- select * into invitation from public.team_invitations where token_hash=encode(digest(p_token,'sha256'),'hex') and accepted_at is null and expires_at>now() for update;
+ select * into invitation from public.team_invitations where token_hash=encode(extensions.digest(p_token,'sha256'),'hex') and accepted_at is null and expires_at>now() for update;
  if invitation.id is null then raise exception 'This invitation is invalid or has expired'; end if;
  if lower(coalesce(user_email,''))<>lower(invitation.email) then raise exception 'Sign in using the email address that was invited'; end if;
  if length(trim(p_full_name))<2 then raise exception 'Enter your full name'; end if;
