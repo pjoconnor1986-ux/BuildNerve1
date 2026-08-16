@@ -1,2 +1,26 @@
-import { NextResponse } from "next/server";import { requireUser } from "@/lib/supabase/server";
-export async function GET(){const x=await requireUser();if(x.demo)return NextResponse.json({mode:"demo"});if(!x.user)return NextResponse.json({error:"Unauthorised"},{status:401});if(!x.profile)return NextResponse.json({needsOnboarding:true});const org=x.profile.organisation_id;const [{data:projects},{data:actions},{data:diaries}]=await Promise.all([x.supabase!.from("projects").select("*").eq("organisation_id",org),x.supabase!.from("actions").select("*").eq("organisation_id",org).order("created_at",{ascending:false}).limit(100),x.supabase!.from("diaries").select("*").eq("organisation_id",org).order("diary_date",{ascending:false}).limit(30)]);return NextResponse.json({mode:"live",profile:x.profile,projects,actions,diaries});}
+import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/supabase/server";
+
+export async function GET(){
+ const x=await requireUser();
+ if(x.demo)return NextResponse.json({mode:"demo"});
+ if(!x.user)return NextResponse.json({error:"Unauthorised"},{status:401});
+ if(!x.profile)return NextResponse.json({needsOnboarding:true});
+
+ const orgId=x.profile.organisation_id;
+ const [{data:organisation},{data:projects},{data:actions},{data:diaries}]=await Promise.all([
+  x.supabase!.from("organisations").select("id,name").eq("id",orgId).single(),
+  x.supabase!.from("projects").select("*").eq("organisation_id",orgId).order("created_at"),
+  x.supabase!.from("actions").select("*").eq("organisation_id",orgId).order("created_at",{ascending:false}).limit(100),
+  x.supabase!.from("diaries").select("*").eq("organisation_id",orgId).order("diary_date",{ascending:false}).limit(30)
+ ]);
+
+ return NextResponse.json({
+  mode:"live",
+  profile:x.profile,
+  organisation,
+  projects:projects||[],
+  actions:actions||[],
+  diaries:diaries||[]
+ });
+}
