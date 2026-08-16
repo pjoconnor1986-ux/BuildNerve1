@@ -1,0 +1,20 @@
+import { NextResponse } from "next/server";
+
+type Priority="Red"|"Amber"|"Green";
+function localInterpret(text:string){
+ const t=text.toLowerCase();
+ const actions:Array<{item:string;owner:string;priority:Priority}>=[]; const risks:string[]=[]; const commercial:string[]=[]; const next:string[]=[];
+ if(/late|did not arrive|not arrive|delivery/.test(t)){actions.push({item:"Confirm supplier ETA and recovery plan",owner:"Buyer",priority:"Red"});risks.push("Planned production may be delayed by material availability.");next.push("Re-plan affected gang if confirmed delivery cannot support tomorrow's work.")}
+ if(/stopped|delay|held up|cannot continue|can't continue/.test(t)){actions.push({item:"Record delay start/end and affected resources",owner:"Site Agent",priority:"Amber"});commercial.push("Preserve diary, labour/plant and instruction evidence for potential time/cost impact.")}
+ if(/instruct|client|engineer instructed|change|deepen|revise/.test(t)){actions.push({item:"Send instruction/change to QS for review",owner:"QS",priority:"Amber"});commercial.push("Potential instructed change detected; link instruction, photos and affected quantities before pricing.")}
+ if(/cat scan|utility|service|fibre|gas|electric/.test(t)){risks.push("Underground-service / excavation readiness issue detected.");actions.push({item:"Check excavation readiness controls with authorised site team",owner:"Engineer",priority:"Red"});next.push("Do not treat the excavation as ready until site-specific controls and authorised human checks are complete.")}
+ if(/move.*gang|gang.*move|reallocate/.test(t))actions.push({item:"Confirm revised gang allocation in tomorrow plan",owner:"Foreman",priority:"Amber"});
+ if(!actions.length)actions.push({item:"Review captured site update and assign any required follow-up",owner:"Site Agent",priority:"Green"});
+ return {summary:"BuildNerve converted the site update into a structured record and proposed follow-up.",diary:text,actions,risks,commercial,next};
+}
+export async function POST(req:Request){
+ try{const body=await req.json();const text=String(body.text||"").trim();if(!text)return NextResponse.json({error:"Text required"},{status:400});const key=process.env.OPENAI_API_KEY;if(!key)return NextResponse.json({...localInterpret(text),mode:"demo"});
+ const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},body:JSON.stringify({model:process.env.OPENAI_MODEL||"gpt-5",input:[{role:"system",content:[{type:"input_text",text:"You are the BuildNerve Quick Capture agent for UK construction. Convert a raw site note into structured, concise JSON with keys summary, diary, actions, risks, commercial, next. actions must be an array of objects with item, owner, priority where priority is Red, Amber or Green. Never issue permits, certify inspections, authorise excavation, or make binding contractual commitments. For safety-critical matters, flag missing controls and require authorised competent-person review. Do not invent project facts."}]},{role:"user",content:[{type:"input_text",text:`Project: ${body.project||"Unknown"}\nRaw site note: ${text}`}]}],text:{format:{type:"json_schema",name:"capture",strict:true,schema:{type:"object",properties:{summary:{type:"string"},diary:{type:"string"},actions:{type:"array",items:{type:"object",properties:{item:{type:"string"},owner:{type:"string"},priority:{type:"string",enum:["Red","Amber","Green"]}},required:["item","owner","priority"],additionalProperties:false}},risks:{type:"array",items:{type:"string"}},commercial:{type:"array",items:{type:"string"}},next:{type:"array",items:{type:"string"}}},required:["summary","diary","actions","risks","commercial","next"],additionalProperties:false}}}})});
+ if(!response.ok)return NextResponse.json({...localInterpret(text),mode:"fallback"});const data=await response.json();try{return NextResponse.json({...JSON.parse(data.output_text),mode:"ai"})}catch{return NextResponse.json({...localInterpret(text),mode:"fallback"})}
+ }catch{return NextResponse.json({error:"Capture processing failed"},{status:500})}
+}
