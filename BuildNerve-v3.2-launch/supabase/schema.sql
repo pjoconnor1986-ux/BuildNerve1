@@ -308,6 +308,62 @@ begin
 end $$;
 revoke all on function public.create_team_invitation(text,text) from public,anon;
 revoke all on function public.accept_team_invitation(text,text) from public,anon;
-grant execute on function public.create_team_invitation(text,text) to authenticated,anon;
-grant execute on function public.accept_team_invitation(text,text) to authenticated,anon;
--- Both functions reject unauthenticated calls internally; anon visibility keeps PostgREST schema discovery consistent.
+grant execute on function public.create_team_invitation(text,text) to authenticated;
+grant execute on function public.accept_team_invitation(text,text) to authenticated;
+
+-- Job operations: drawings, material CVR, safety and targeted updates.
+create table if not exists public.drawings (
+ id uuid primary key default gen_random_uuid(), organisation_id uuid not null references public.organisations(id) on delete cascade,
+ project_id uuid not null references public.projects(id) on delete cascade, drawing_number text not null, title text not null,
+ revision text not null default 'P01', status text not null default 'current', storage_path text not null, issue_date date,
+ notes text, uploaded_by uuid references public.profiles(id), created_at timestamptz not null default now(), unique(project_id,drawing_number,revision)
+);
+create table if not exists public.material_orders (
+ id uuid primary key default gen_random_uuid(), organisation_id uuid not null references public.organisations(id) on delete cascade,
+ project_id uuid not null references public.projects(id) on delete cascade, supplier text not null, description text not null,
+ order_reference text, quantity numeric(14,3), unit text, unit_cost numeric(14,2),
+ total_cost numeric(14,2) generated always as (coalesce(quantity,1)*coalesce(unit_cost,0)) stored,
+ ordered_at timestamptz not null default now(), due_at timestamptz, delivered_at timestamptz,
+ status text not null default 'ordered', email_thread_url text, created_by uuid not null references public.profiles(id), created_at timestamptz not null default now()
+);
+create table if not exists public.safety_forms (
+ id uuid primary key default gen_random_uuid(), organisation_id uuid not null references public.organisations(id) on delete cascade,
+ project_id uuid not null references public.projects(id) on delete cascade, form_type text not null, title text not null,
+ status text not null default 'draft', form_data jsonb not null default '{}'::jsonb, assigned_to uuid references public.profiles(id),
+ submitted_by uuid references public.profiles(id), approved_by uuid references public.profiles(id), submitted_at timestamptz,
+ approved_at timestamptz, created_by uuid not null references public.profiles(id), created_at timestamptz not null default now()
+);
+create table if not exists public.targeted_updates (
+ id uuid primary key default gen_random_uuid(), organisation_id uuid not null references public.organisations(id) on delete cascade,
+ project_id uuid references public.projects(id) on delete cascade, title text not null, body text, category text not null default 'general',
+ created_by uuid not null references public.profiles(id), created_at timestamptz not null default now()
+);
+create table if not exists public.targeted_update_recipients (
+ update_id uuid not null references public.targeted_updates(id) on delete cascade,
+ recipient_id uuid not null references public.profiles(id) on delete cascade, read_at timestamptz, primary key(update_id,recipient_id)
+);
+create index if not exists idx_drawings_project on public.drawings(project_id,created_at desc);
+create index if not exists idx_material_orders_project_due on public.material_orders(project_id,due_at);
+create index if not exists idx_safety_forms_project on public.safety_forms(project_id,status,created_at desc);
+alter table public.drawings enable row level security;
+alter table public.material_orders enable row level security;
+alter table public.safety_forms enable row level security;
+alter table public.targeted_updates enable row level security;
+alter table public.targeted_update_recipients enable row level security;
+
+drop policy if exists drawings_tenant on public.drawings;
+create policy drawings_tenant on public.drawings for all to authenticated using(organisation_id=public.current_org_id()) with check(organisation_id=public.current_org_id() and uploaded_by=(select auth.uid()));
+drop policy if exists material_orders_tenant on public.material_orders;
+create policy material_orders_tenant on public.material_orders for all to authenticated using(organisation_id=public.current_org_id()) with check(organisation_id=public.current_org_id() and created_by=(select auth.uid()));
+drop policy if exists safety_forms_tenant on public.safety_forms;
+create policy safety_forms_tenant on public.safety_forms for all to authenticated using(organisation_id=public.current_org_id()) with check(organisation_id=public.current_org_id() and created_by=(select auth.uid()));
+drop policy if exists targeted_updates_visible on public.targeted_updates;
+create policy targeted_updates_visible on public.targeted_updates for select to authenticated using(organisation_id=public.current_org_id() and (created_by=(select auth.uid()) or exists(select 1 from public.targeted_update_recipients r where r.update_id=id and r.recipient_id=(select auth.uid()))));
+drop policy if exists targeted_updates_create on public.targeted_updates;
+create policy targeted_updates_create on public.targeted_updates for insert to authenticated with check(organisation_id=public.current_org_id() and created_by=(select auth.uid()));
+drop policy if exists targeted_recipients_visible on public.targeted_update_recipients;
+create policy targeted_recipients_visible on public.targeted_update_recipients for select to authenticated using(recipient_id=(select auth.uid()) or exists(select 1 from public.targeted_updates u where u.id=update_id and u.created_by=(select auth.uid())));
+drop policy if exists targeted_recipients_create on public.targeted_update_recipients;
+create policy targeted_recipients_create on public.targeted_update_recipients for insert to authenticated with check(exists(select 1 from public.targeted_updates u join public.profiles p on p.id=recipient_id where u.id=update_id and u.created_by=(select auth.uid()) and p.organisation_id=public.current_org_id()));
+
+grant select,insert,update,delete on public.drawings,public.material_orders,public.safety_forms,public.targeted_updates,public.targeted_update_recipients to authenticated;

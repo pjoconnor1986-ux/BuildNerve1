@@ -245,3 +245,18 @@ tbody tr:hover{background:#fbfcfd}
 .teamAvatar{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:#e8eef5;color:#142b49;font-size:12px;font-weight:900}
 @media(max-width:900px){.teamLayout{grid-template-columns:1fr}.teamLayout>.card:last-child{grid-column:auto}}
 @media(max-width:560px){.inviteLink{grid-template-columns:1fr}.teamMember{grid-template-columns:42px 1fr}.teamMember>.pill{grid-column:2}}
+
+/* Live job operations */
+.opsGrid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:16px}
+.opsToolbar{display:flex;align-items:end;justify-content:space-between;gap:14px;margin-bottom:16px}
+.opsToolbar .opsField{min-width:min(420px,70vw)}
+.opsForm,.opsField{display:grid;gap:11px}
+.opsForm label,.opsField{display:grid;gap:6px;color:var(--slate-700);font-size:10px;font-weight:750}
+.opsForm input,.opsForm select,.opsForm textarea,.opsField select{width:100%;border:1px solid var(--slate-300);background:var(--white);border-radius:9px;padding:10px 11px;color:var(--slate-950)}
+.opsForm textarea{resize:vertical;line-height:1.45}
+.opsPair,.opsTriple{display:grid;grid-template-columns:1fr 1fr;gap:11px}.opsTriple{grid-template-columns:repeat(3,1fr)}
+.opsInset{margin-bottom:16px}.opsMetrics{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.opsEmpty{padding:22px 4px;color:var(--slate-500);font-size:11px}.opsMessage{padding:10px 12px;border-radius:9px;background:var(--blue-soft);color:#315caa;font-size:10px;line-height:1.45}
+.opsSub{display:block;color:var(--slate-500);margin-top:4px}.opsActions{display:flex;align-items:center;gap:6px}.opsActions a,.opsActions button{font-size:9px;padding:6px 8px;border-radius:7px;background:var(--blue-soft);color:var(--blue);text-decoration:none;font-weight:750}.opsActions button{background:var(--slate-100);color:var(--slate-700)}
+.recipientList{display:grid;gap:8px}.recipientList label{display:flex;align-items:center;gap:11px;padding:11px;border:1px solid var(--slate-200);border-radius:10px;cursor:pointer}.recipientList input{width:17px;height:17px;accent-color:var(--orange)}.recipientList b,.recipientList small{display:block}.recipientList b{font-size:11px}.recipientList small{margin-top:3px;color:var(--slate-500);font-size:9px;text-transform:capitalize}
+@media(max-width:900px){.opsGrid{grid-template-columns:1fr}}@media(max-width:560px){.opsToolbar{display:grid}.opsPair,.opsTriple{grid-template-columns:1fr}.opsToolbar .opsField{min-width:0}.opsActions{display:grid}}
