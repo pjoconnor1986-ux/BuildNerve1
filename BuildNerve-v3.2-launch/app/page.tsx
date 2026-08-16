@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { DrawingRegister, MaterialWorkspace, SafetyWorkspace, SupplierDirectory, TargetedUpdates } from "./operations";
+import { CalendarWorkspace, DrawingRegister, MaterialWorkspace, SafetyWorkspace, SupplierDirectory, TargetedUpdates } from "./operations";
 
 type Priority="Red"|"Amber"|"Green";
-type View="home"|"capture"|"agent"|"projects"|"diaries"|"commercial"|"procurement"|"suppliers"|"quality"|"safety"|"documents"|"updates"|"actions"|"activity"|"team";
+type View="home"|"capture"|"agent"|"projects"|"calendar"|"diaries"|"commercial"|"procurement"|"suppliers"|"quality"|"safety"|"documents"|"updates"|"actions"|"activity"|"team";
 type Action={id:number|string;item:string;owner:string;project:string;due:string;priority:Priority;status:"Open"|"Closed"};
 type CaptureResult={summary:string;diary?:string;actions?:Array<{item:string;owner:string;priority:Priority}>;risks?:string[];commercial?:string[];next?:string[]};
 
@@ -29,7 +29,7 @@ const activities=[
  ["08:40","BuildNerve","Created 3 morning actions from director briefing","Company"]
 ];
 const nav:Array<[View,string,string]>=[
- ["home","Today","⌂"],["capture","Quick Capture","＋"],["agent","BuildNerve AI","✦"],["projects","Projects","▦"],["diaries","Diaries","▤"],
+ ["home","Today","⌂"],["capture","Quick Capture","＋"],["agent","BuildNerve AI","✦"],["projects","Projects","▦"],["calendar","Live Calendar","▦"],["diaries","Diaries","▤"],
  ["commercial","Commercial","£"],["procurement","Materials & CVR","▣"],["suppliers","Suppliers","⌂"],["team","Team","♟"],["quality","Quality","✓"],["safety","Safety Forms","⌁"],["documents","Drawings","▧"],["updates","Targeted Updates","◎"],["actions","Actions","!"],["activity","Activity","↺"]
 ];
 function Pill({v}:{v:string}){const c=/red|blocked|critical/i.test(v)?"red":/amber|due|pending/i.test(v)?"amber":/green|ready|passed|approved/i.test(v)?"green":"blue";return <span className={`pill ${c}`}>{v}</span>}
@@ -78,6 +78,7 @@ export default function Home(){
    {view==='agent'&&<section className="grid agentGrid"><Card title="Ask BuildNerve" sub="One assistant across site, office and commercial"><div className="chat">{chat.map((m,i)=><div key={i} className={`msg ${m.role}`}>{m.text}</div>)}{thinking&&<div className="msg agent">Analysing current records…</div>}</div><form className="ask" onSubmit={e=>{e.preventDefault();ask()}}><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Ask naturally: what should I do first today?"/><button>Send</button></form><div className="chips"><button onClick={()=>ask('What should I do first today?')}>First priority</button><button onClick={()=>ask('Plan tomorrow')}>Tomorrow plan</button><button onClick={()=>ask('Find margin leakage')}>Margin leakage</button><button onClick={()=>ask('Find missing records')}>Missing records</button></div></Card><Card title="Agentic mode" sub="BuildNerve can prepare work, not just answer questions"><AgentStep n="1" t="Observe" d="Read project records and new captures"/><AgentStep n="2" t="Reason" d="Connect site, programme, commercial and QA signals"/><AgentStep n="3" t="Prepare" d="Draft records, actions, plans and evidence packs"/><AgentStep n="4" t="Escalate" d="Put the right issue in front of the right person"/><AgentStep n="5" t="Learn" d="Use accepted/closed actions to improve priorities"/><div className="guard">Safety-critical approvals and binding commercial commitments stay with authorised humans.</div></Card></section>}
 
    {view==='projects'&&<section><Card title="Projects" sub="Simple portfolio view"><Table headers={["Project","Client","Stage","Progress","Margin","Risk"]} rows={projects.map(p=>[p.name,p.client,p.stage,`${p.progress}%`,p.margin,<Pill key={p.name} v={p.risk}/>])}/></Card></section>}
+   {view==='calendar'&&<CalendarWorkspace projects={projects}/>} 
    {view==='diaries'&&<section className="grid two"><Card title="Today’s diaries" sub="Capture once; reuse everywhere"><Table headers={["Project","Status","Last update","Issues"]} rows={[["Oakfield","Draft","11:28","2"],["Riverside","Live","10:54","3"],["Westgate","Live","10:31","0"]]}/><button className="wide" onClick={()=>setView('capture')}>＋ Add site update</button></Card><Card title="Automatic reuse"><Row a="End-of-day report" b="Prepared"/><Row a="Commercial evidence links" b="4"/><Row a="Actions extracted" b="6"/><Row a="Programme risks" b="2"/><button className="wide" onClick={()=>openAgent('Draft today’s end-of-day reports from all captured site information')}>✦ Draft reports</button></Card></section>}
    {view==='commercial'&&<section><div className="metrics"><Metric label="Forecast revenue" value="£8.38m"/><Metric label="Forecast margin" value="11.1%"/><Metric label="Unpriced change" value="£310k"/><Metric label="Evidence gaps" value="3"/></div><Card title="Commercial attention" sub="Site evidence connected to value"><Table headers={["Project","Event","Value","Evidence","Status"]} rows={[["Riverside","Attenuation instruction","£162k","Diary + instruction",<Pill key="a" v="Amber"/>],["Oakfield","Utility clash / delay","TBC","Diary + photos",<Pill key="b" v="Pending"/>],["Oakfield","Drainage revision","£148k","Drawing + instruction",<Pill key="c" v="Amber"/>]]}/><button className="wide" onClick={()=>openAgent('Review all commercial events and identify which evidence or notices need attention')}>✦ Protect margin</button></Card></section>}
    {view==='procurement'&&<MaterialWorkspace projects={projects}/>} 
