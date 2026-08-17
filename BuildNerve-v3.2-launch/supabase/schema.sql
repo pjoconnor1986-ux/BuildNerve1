@@ -400,3 +400,48 @@ create policy calendar_events_tenant on public.calendar_events for all to authen
 using(organisation_id=public.current_org_id())
 with check(organisation_id=public.current_org_id() and created_by=(select auth.uid()));
 grant select,insert,update,delete on public.calendar_events to authenticated;
+
+-- Groundworks operating records.
+create table if not exists public.contacts (
+ id uuid primary key default gen_random_uuid(), organisation_id uuid not null references public.organisations(id) on delete cascade,
+ project_id uuid references public.projects(id) on delete cascade, company text not null, full_name text not null, role text, trade text,
+ phone text, email text, emergency boolean not null default false, created_by uuid not null references public.profiles(id), created_at timestamptz not null default now()
+);
+create table if not exists public.takeoffs (
+ id uuid primary key default gen_random_uuid(), organisation_id uuid not null references public.organisations(id) on delete cascade,
+ project_id uuid not null references public.projects(id) on delete cascade, drawing_ref text not null, item text not null,
+ takeoff_type text not null check(takeoff_type in ('foundation','drainage','earthworks','external_works','other')),
+ length numeric not null default 0, width numeric not null default 0, depth numeric not null default 0, quantity numeric not null,
+ unit text not null, waste_percent numeric not null default 0, notes text, status text not null default 'draft' check(status in ('draft','checked','approved')),
+ created_by uuid not null references public.profiles(id), created_at timestamptz not null default now()
+);
+create table if not exists public.snags (
+ id uuid primary key default gen_random_uuid(), organisation_id uuid not null references public.organisations(id) on delete cascade,
+ project_id uuid not null references public.projects(id) on delete cascade, title text not null, description text, location text, drawing_ref text,
+ priority text not null default 'amber' check(priority in ('red','amber','green')), status text not null default 'open' check(status in ('open','in_progress','ready_to_inspect','closed')),
+ due_at date, photo_paths text[] not null default '{}', assigned_to uuid references public.profiles(id), created_by uuid not null references public.profiles(id), created_at timestamptz not null default now()
+);
+create table if not exists public.material_data (
+ id uuid primary key default gen_random_uuid(), organisation_id uuid not null references public.organisations(id) on delete cascade,
+ project_id uuid references public.projects(id) on delete cascade, product_name text not null, manufacturer text, category text,
+ installation_guidance text, data_sheet_path text, coshh_path text, certification_path text, created_by uuid not null references public.profiles(id), created_at timestamptz not null default now()
+);
+create table if not exists public.plant_register (
+ id uuid primary key default gen_random_uuid(), organisation_id uuid not null references public.organisations(id) on delete cascade,
+ project_id uuid references public.projects(id) on delete set null, asset_number text not null, description text not null, supplier text,
+ hired_on date, off_hire_due date, certificate_type text, certificate_expiry date, certificate_path text, amber_days integer not null default 30,
+ status text not null default 'on_hire' check(status in ('on_hire','off_hired','quarantined')), created_by uuid not null references public.profiles(id), created_at timestamptz not null default now(), unique(organisation_id,asset_number)
+);
+create index if not exists idx_contacts_org on public.contacts(organisation_id,company);
+create index if not exists idx_takeoffs_project on public.takeoffs(project_id,created_at desc);
+create index if not exists idx_snags_project_status on public.snags(project_id,status,created_at desc);
+create index if not exists idx_material_data_org on public.material_data(organisation_id,product_name);
+create index if not exists idx_plant_org_expiry on public.plant_register(organisation_id,certificate_expiry);
+do $$ declare t text; begin
+ foreach t in array array['contacts','takeoffs','snags','material_data','plant_register'] loop
+  execute format('alter table public.%I enable row level security',t);
+  execute format('drop policy if exists %I on public.%I',t||'_tenant',t);
+  execute format('create policy %I on public.%I for all to authenticated using (organisation_id=public.current_org_id()) with check (organisation_id=public.current_org_id() and created_by=(select auth.uid()))',t||'_tenant',t);
+  execute format('grant select,insert,update,delete on public.%I to authenticated',t);
+ end loop;
+end $$;

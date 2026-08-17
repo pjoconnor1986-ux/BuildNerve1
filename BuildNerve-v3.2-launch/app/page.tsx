@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { CalendarWorkspace, DrawingRegister, MaterialWorkspace, SafetyWorkspace, SupplierDirectory, TargetedUpdates } from "./operations";
+import {GroundworksHub} from "./groundworks";
 
 type Priority="Red"|"Amber"|"Green";
-type View="home"|"capture"|"agent"|"projects"|"calendar"|"diaries"|"commercial"|"procurement"|"suppliers"|"quality"|"safety"|"documents"|"updates"|"actions"|"activity"|"team";
+type View="home"|"groundworks"|"capture"|"agent"|"projects"|"calendar"|"diaries"|"commercial"|"procurement"|"suppliers"|"quality"|"safety"|"documents"|"updates"|"actions"|"activity"|"team";
 type Action={id:number|string;item:string;owner:string;project:string;due:string;priority:Priority;status:"Open"|"Closed"};
 type CaptureResult={summary:string;diary?:string;actions?:Array<{item:string;owner:string;priority:Priority}>;risks?:string[];commercial?:string[];next?:string[]};
 
@@ -29,7 +30,7 @@ const activities=[
  ["08:40","BuildNerve","Created 3 morning actions from director briefing","Company"]
 ];
 const nav:Array<[View,string,string]>=[
- ["home","Today","⌂"],["capture","Quick Capture","＋"],["agent","BuildNerve AI","✦"],["projects","Projects","▦"],["calendar","Live Calendar","▦"],["diaries","Diaries","▤"],
+ ["home","Today","⌂"],["groundworks","Groundworks Hub","◈"],["capture","Quick Capture","＋"],["agent","BuildNerve AI","✦"],["projects","Projects","▦"],["calendar","Live Calendar","▦"],["diaries","Diaries","▤"],
  ["commercial","Commercial","£"],["procurement","Materials & CVR","▣"],["suppliers","Suppliers","⌂"],["team","Team","♟"],["quality","Quality","✓"],["safety","Safety Forms","⌁"],["documents","Drawings","▧"],["updates","Targeted Updates","◎"],["actions","Actions","!"],["activity","Activity","↺"]
 ];
 function Pill({v}:{v:string}){const c=/red|blocked|critical/i.test(v)?"red":/amber|due|pending/i.test(v)?"amber":/green|ready|passed|approved/i.test(v)?"green":"blue";return <span className={`pill ${c}`}>{v}</span>}
@@ -68,6 +69,7 @@ export default function Home(){
     <div className="grid three"><Card title="Today on site"><Row a="Operatives" b="74"/><Row a="Active gangs" b="12"/><Row a="Excavations" b="7"/><Row a="Deliveries" b="14"/></Card><Card title="Agent work completed"><Row a="Actions created" b="8"/><Row a="Risks escalated" b="3"/><Row a="Records linked" b="17"/><Row a="Briefings prepared" b="4"/></Card><Card title="Next best action"><div className="nextBest"><span>01</span><div><b>Resolve Riverside disposal route</b><p>Highest current programme and cost exposure.</p></div></div><button className="wide" onClick={()=>openAgent('Help me resolve the Riverside contaminated muck disposal risk')}>Work this issue →</button></Card></div>
    </section>}
 
+   {view==='groundworks'&&<GroundworksHub projects={projects}/>}
    {view==='capture'&&<section className="captureLayout"><Card title="Tell BuildNerve once" sub="Type or dictate what happened. BuildNerve structures it into records and proposed actions.">
     <div className="captureBox"><textarea value={capture} onChange={e=>setCapture(e.target.value)} placeholder="Example: Pipe delivery is late. D4 stopped at 11:20. Move drainage gang to Road 3 tomorrow. Client engineer instructed us to expose the fibre service before continuing."/><div className="captureTools"><span>🎙 Voice-ready workflow</span><button onClick={runCapture} disabled={capBusy}>{capBusy?'Analysing…':'✦ Understand & act'}</button></div></div>
     <div className="examples"><span>Try:</span><button onClick={()=>setCapture('D4 stopped at 11:20 because the 150mm pipe delivery did not arrive. Move the gang to Road 3 tomorrow and chase the supplier.')}>Delay + action</button><button onClick={()=>setCapture('Client engineer instructed us to deepen MH22 by 450mm. Photos taken and instruction received on site.')}>Instruction/change</button><button onClick={()=>setCapture('Plot 48 cannot start excavation because the CAT scan has not been completed.')}>Readiness issue</button></div>
